@@ -3,6 +3,8 @@ package gbeta2
 
 import (
 	"net/http"
+	"strings"
+	"github.com/julienschmidt/httprouter"
 )
 
 var (
@@ -16,7 +18,7 @@ type Filter func (w http.ResponseWriter, r *http.Request, ctx map[string]interfa
 
 type Handler func (w http.ResponseWriter, r *http.Request ,ctx map[string]interface{})
 
-type Middleware func(w http.ResponseWriter, r *http.Request ,ctx map[string]interface{}) Handler
+type Middleware func(handle Handler) Handler
 
 type pkg struct {
 	p_type int
@@ -27,11 +29,9 @@ type pkg struct {
 	handle Handler
 }
 
-
 type  Router struct{
 	pkg []*pkg
 }
-
 
 func (r *Router )Use(args ... interface{})*Router{
     if len(args) == 0{
@@ -106,6 +106,7 @@ func (r *Router)handle(method,path string ,args ... interface{}){
 	if len(args) == 0{
 		panic("Http handler is required!")
 	}
+
     _pkg:= new(pkg)
 	_pkg.p_type = _T_HTTP_Handler
 	_pkg.path = path
@@ -119,7 +120,6 @@ func (r *Router)handle(method,path string ,args ... interface{}){
     // type check
 	if len(args) > 1{
 		filters  = make([]Filter, len(args)-1)
-
 		for i:=0;i<len(args) -1 ;i++{
 			ft,ok = args[i].(Filter)
 			if ok == false{
@@ -138,7 +138,9 @@ func (r *Router)handle(method,path string ,args ... interface{}){
 
 	if len(args) > 1{
 		_pkg.handle = func (w http.ResponseWriter, r *http.Request ,ctx map[string]interface{}){
+
 			 var next bool = true
+
 			 for i:=0;i<len(filters);i++{
 				 next = filters[i](w,r,ctx)
 				 if next == false{
@@ -188,3 +190,68 @@ func (r*Router)DELETE(path string ,args ... interface{}){
 	r.handle("delete",path,args...)
 }
 
+
+func pathMatch(src, dst string) bool{
+	if len(src) < len(dst){
+		return src == dst[0:len(src)]
+	}
+	return src[0:len(dst)] == dst
+}
+
+func linkMiddlewareAndFilter(pkgs []*pkg,end int, path string ,handle Handler)Handler{
+    for i:=0;i<end;i++{
+		if pkgs[i].p_type == _T_Middleware {
+			handle = pkgs[i].mw(handle)
+		}
+		if pkgs[i].p_type == _T_Filter {
+            if pathMatch(pkgs[i].path,path){
+				var _handle Handler = handle
+				handle = func(ft Filter,hd Handler)Handler{
+                       return func(w http.ResponseWriter, r *http.Request ,ctx map[string]interface{}){
+							next:= ft(w,r,ctx)
+							if true == next{
+                                 hd(w,r,ctx)
+							}
+					   }
+				}(pkgs[i].filter,_handle)
+			}
+		}
+	}
+	return handle
+}
+
+
+func (r*Router) Build()*httprouter.Router{
+
+	 router:= httprouter.New()
+
+	
+	 for i:=0;i<len(r.pkg);i++{
+         if r.pkg[i].path != ""{
+			 r.pkg[i].path = strings.Replace(r.pkg[i].path,"\\","/",-1)
+		 }
+		
+		 if r.pkg[i].p_type == _T_HTTP_Handler {
+			 handle := linkMiddlewareAndFilter(r.pkg,i,r.pkg[i].path,r.pkg[i].handle)
+
+			 md := r.pkg[i].method
+			 pt := r.pkg[i].path
+
+			 if "get" == md {
+				 router.GET(pt,handle)
+			 }else if "post" == md{
+				 router.POST(pt,handle)
+			 }else if "put" == md{
+				 router.PUT(pt,handle)
+			 }
+		 }
+
+	 }
+
+	 return router
+}
+
+
+func New()*Router{
+	return new(Router)
+}
