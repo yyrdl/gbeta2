@@ -145,23 +145,24 @@ func (r*Router)DELETE(path string ,args ... Handler){
 
 
 func pathMatch(src, dst string) bool{
+	
+	 
 	if len(src) < len(dst){
 		return src == dst[0:len(src)]
 	}
+	 
 	return src[0:len(dst)] == dst
 }
 
 func linkMiddlewareAndFilter(pkgs []*pkg,end int, path string ,handle Handler)Handler{
-
-	var filter Handler = nil
-
-    for i:=0;i<end;i++{
-		
+    for i:= end-1;i >-1 ;i--{
+		 
 		if pkgs[i].p_type == _T_Middleware {
 			handle = pkgs[i].mw(handle)
 		}
 
 		if pkgs[i].p_type == _T_Filter {
+			 
             if pathMatch(pkgs[i].path,path){
 				var _handle Handler = handle
 				handle = func(ft Handler,hd Handler)Handler{
@@ -189,14 +190,17 @@ func (r*Router) Build()*httprouter.Router{
 
 	
 	 for i:=0;i<len(r.pkg);i++{
+
          if r.pkg[i].path != ""{
 			 r.pkg[i].path = strings.Replace(r.pkg[i].path,"\\","/",-1)
 		 }
 		
 		 if r.pkg[i].p_type == _T_HTTP_Handler {
+
 			 handle := linkMiddlewareAndFilter(r.pkg,i,r.pkg[i].path,r.pkg[i].handle)
 
 			 md := r.pkg[i].method
+
 			 pt := r.pkg[i].path
 
 			 httprouter_handle := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params){
