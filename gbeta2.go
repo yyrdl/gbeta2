@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"github.com/julienschmidt/httprouter"
+	"fmt"
 )
 
 var (
@@ -52,6 +53,11 @@ func (r *Router )Use(path string,handle Handler)*Router{
 	return  r;
 }
 
+func (r*Router)SubRouter(path string,router *Router)*Router{
+	r.link(path,router)
+	return r
+}
+
 func mergePath(p1,p2 string) string{
     if p1 == ""{
 		return p2
@@ -74,6 +80,7 @@ func (r*Router)link(path string,router *Router){
 	for i:=0;i<len(router.pkg);i++{
 		if router.pkg[i].p_type != _T_Middleware{
 		   router.pkg[i].path = mergePath(path,router.pkg[i].path)
+		   fmt.Println("Merge path",router.pkg[i].path)
 		}
 		r.pkg = append(r.pkg,router.pkg[i])
 	}
@@ -202,6 +209,8 @@ func (r*Router) Build()*httprouter.Router{
 			 md := r.pkg[i].method
 
 			 pt := r.pkg[i].path
+
+			 fmt.Println("Mount",pt,md)
 
 			 httprouter_handle := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params){
 				 ctx:= make(map[string]interface{})
