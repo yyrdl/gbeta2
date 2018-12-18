@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 	"github.com/julienschmidt/httprouter"
-	"fmt"
 )
 
 var (
@@ -65,24 +64,53 @@ func mergePath(p1,p2 string) string{
 	if p2 == ""{
 		return p1
 	}
-	if p1[len(p1)-1:] == "/" ||  p1[len(p1)-1:] == "\\"{
-		p1 = p1[0:len(p1)-1]
-	}
 
 	if p1[len(p1)-1:] == "/" ||  p1[len(p1)-1:] == "\\"{
-		p1 = p1[0:len(p1)-1]
+		p1 = p1[0:len(p1)-2]
+	}
+
+	if p2[0:1] == "/" ||  p2[0:1] == "\\"{
+		p2 = p2[1:]
 	}
 	return p1+"/"+p2
 }
-// link subrouter
+
+func linkMiddlewareAndFilter(pkgs []*pkg,end int, path string ,handle Handler)Handler{
+    for i:= end-1;i >-1 ;i--{
+		 
+		if pkgs[i].p_type == _T_Middleware {
+			handle = pkgs[i].mw(handle)
+		}
+
+		if pkgs[i].p_type == _T_Filter {
+			 
+            if pathMatch(pkgs[i].path,path){
+				var _handle Handler = handle
+				handle = func(ft Handler,hd Handler)Handler{
+                       return func(w http.ResponseWriter, r *http.Request ,ctx map[string]interface{},next Next){
+							var _next bool = false
+							 __next := func(){
+								 _next = true
+							 }
+						    ft(w,r,ctx,__next)
+							if true == _next{
+                                 hd(w,r,ctx,next)
+							}
+					   }
+				}(pkgs[i].handle,_handle)
+			}
+		}
+	}
+	return handle
+}
 
 func (r*Router)link(path string,router *Router){
 	for i:=0;i<len(router.pkg);i++{
-		if router.pkg[i].p_type != _T_Middleware{
-		   router.pkg[i].path = mergePath(path,router.pkg[i].path)
-		   fmt.Println("Merge path",router.pkg[i].path)
+		if router.pkg[i].p_type == _T_HTTP_Handler{
+			router.pkg[i].handle  = linkMiddlewareAndFilter(router.pkg,i,router.pkg[i].path,router.pkg[i].handle)
+			router.pkg[i].path = mergePath(path,router.pkg[i].path)
+			r.pkg = append(r.pkg,router.pkg[i])
 		}
-		r.pkg = append(r.pkg,router.pkg[i])
 	}
 }
 
@@ -161,35 +189,6 @@ func pathMatch(src, dst string) bool{
 	return src[0:len(dst)] == dst
 }
 
-func linkMiddlewareAndFilter(pkgs []*pkg,end int, path string ,handle Handler)Handler{
-    for i:= end-1;i >-1 ;i--{
-		 
-		if pkgs[i].p_type == _T_Middleware {
-			handle = pkgs[i].mw(handle)
-		}
-
-		if pkgs[i].p_type == _T_Filter {
-			 
-            if pathMatch(pkgs[i].path,path){
-				var _handle Handler = handle
-				handle = func(ft Handler,hd Handler)Handler{
-                       return func(w http.ResponseWriter, r *http.Request ,ctx map[string]interface{},next Next){
-							var _next bool = false
-							 __next := func(){
-								 _next = true
-							 }
-						    ft(w,r,ctx,__next)
-							if true == _next{
-                                 hd(w,r,ctx,next)
-							}
-					   }
-				}(pkgs[i].handle,_handle)
-			}
-		}
-	}
-	return handle
-}
-
 
 func (r*Router) Build()*httprouter.Router{
 
@@ -209,8 +208,6 @@ func (r*Router) Build()*httprouter.Router{
 			 md := r.pkg[i].method
 
 			 pt := r.pkg[i].path
-
-			 fmt.Println("Mount",pt,md)
 
 			 httprouter_handle := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params){
 				 ctx:= make(map[string]interface{})
