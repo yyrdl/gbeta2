@@ -75,6 +75,15 @@ func mergePath(p1,p2 string) string{
 	return p1+"/"+p2
 }
 
+func pathMatch(src, dst string) bool{
+
+	if len(src) <= len(dst){
+		return src == dst[0:len(src)]
+	}
+	 
+	return false
+}
+
 func linkMiddlewareAndFilter(pkgs []*pkg,end int, path string ,handle Handler)Handler{
     for i:= end-1;i >-1 ;i--{
 		 
@@ -179,15 +188,7 @@ func (r*Router)DELETE(path string ,args ... Handler){
 }
 
 
-func pathMatch(src, dst string) bool{
-	
-	 
-	if len(src) < len(dst){
-		return src == dst[0:len(src)]
-	}
-	 
-	return src[0:len(dst)] == dst
-}
+
 
 
 func (r*Router) Build()*httprouter.Router{
