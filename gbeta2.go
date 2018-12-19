@@ -1,10 +1,13 @@
-package gbeta2
+// created by yyrdl on 2018.12.18
+// see github.com/yyrdl/gbeta2
 
+package gbeta2
 
 import (
 	"net/http"
 	"strings"
 	"github.com/julienschmidt/httprouter"
+	"sync"
 )
 
 var (
@@ -16,7 +19,7 @@ var (
 
 type Next func()
 
-type Handler func (w http.ResponseWriter, r *http.Request ,ctx map[string]interface{},next Next)
+type Handler func (w *Res, r *http.Request ,ctx *Ctx,next Next)
 
 
 type Middleware func(handle Handler) Handler
@@ -31,6 +34,8 @@ type pkg struct {
 
 type  Router struct{
 	pkg []*pkg
+	res_pool sync.Pool
+	ctx_pool sync.Pool
 }
 
 func (r*Router)Mw( mw Middleware)*Router{
@@ -72,6 +77,15 @@ func mergePath(p1,p2 string) string{
 	if p2[0:1] == "/" ||  p2[0:1] == "\\"{
 		p2 = p2[1:]
 	}
+
+	if "/" == p2 || "\\" == p2 {
+		p2 = ""
+	}
+
+	if p2 == ""{
+		return p1
+	}
+
 	return p1+"/"+p2
 }
 
@@ -96,7 +110,7 @@ func linkMiddlewareAndFilter(pkgs []*pkg,end int, path string ,handle Handler)Ha
             if pathMatch(pkgs[i].path,path){
 				var _handle Handler = handle
 				handle = func(ft Handler,hd Handler)Handler{
-                       return func(w http.ResponseWriter, r *http.Request ,ctx map[string]interface{},next Next){
+                       return func(w *Res, r *http.Request ,ctx *Ctx,next Next){
 							var _next bool = false
 							 __next := func(){
 								 _next = true
@@ -133,7 +147,7 @@ func (r *Router)handle(method,path string ,args ... Handler){
 	_pkg.path = path
 	_pkg.method = method
 	
-	_pkg.handle = func (w http.ResponseWriter, r *http.Request ,ctx map[string]interface{},next Next){
+	_pkg.handle = func (w *Res, r *http.Request ,ctx *Ctx,next Next){
 
 		var _next bool = false
 
@@ -188,9 +202,6 @@ func (r*Router)DELETE(path string ,args ... Handler){
 }
 
 
-
-
-
 func (r*Router) Build()*httprouter.Router{
 
 	 router:= httprouter.New()
@@ -210,11 +221,22 @@ func (r*Router) Build()*httprouter.Router{
 
 			 pt := r.pkg[i].path
 
-			 httprouter_handle := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params){
-				 ctx:= make(map[string]interface{})
-				 ctx["params"] = ps
+			 httprouter_handle := func(w http.ResponseWriter, req *http.Request, ps httprouter.Params){
+				 
 				 next:= func(){}
-				 handle(w,r,ctx,next)
+				 res := r.res_pool.Get().(*Res)
+				 res.SetWriter(w)
+
+				 ctx := r.ctx_pool.Get().(*Ctx)
+				 ctx.Set("params",ps)
+
+				 handle(res,req,ctx,next)
+
+				 res.Clear()
+				 r.res_pool.Put(res)
+
+				 ctx.Clear()
+				 r.ctx_pool.Put(ctx)
 			 }
 
 			 if "get" == md {
@@ -241,5 +263,14 @@ func (r*Router) Build()*httprouter.Router{
 
 
 func New()*Router{
-	return new(Router)
+	
+	router := new(Router)
+
+	router.res_pool.New = func()interface{}{
+		return new(Res)
+	}
+	router.ctx_pool.New = func()interface{}{
+		return NewContext()
+	}
+	return router
 }
