@@ -15,7 +15,7 @@ type Res struct {
 
 const (
 	noWritten = -1
-	defaultStatus = http.StatusOK
+	defaultStatus = 200
 )
 
 func (w *Res) Clear( ) {
@@ -56,7 +56,12 @@ func (w *Res) WriteString(s string) (n int, err error) {
 }
 
 func (w *Res) Status() int {
-	return w.status
+	if w.status > 0 {
+		return w.status
+	}else{
+		return 200
+	}
+
 }
 
 func (w *Res) Size() int {

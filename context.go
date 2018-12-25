@@ -1,3 +1,5 @@
+// created by yyrdl on 2018.12.18
+
 package gbeta2
 
 import (

@@ -11,7 +11,6 @@ import (
 )
 
 var (
-	
 	_T_Middleware int = 0
 	_T_HTTP_Handler int = 1
 	_T_Filter = 2
@@ -112,9 +111,9 @@ func linkMiddlewareAndFilter(pkgs []*pkg,end int, path string ,handle Handler)Ha
 				handle = func(ft Handler,hd Handler)Handler{
                        return func(w *Res, r *http.Request ,ctx *Ctx,next Next){
 							var _next bool = false
-							 __next := func(){
+							__next := func(){
 								 _next = true
-							 }
+							}
 						    ft(w,r,ctx,__next)
 							if true == _next{
                                  hd(w,r,ctx,next)

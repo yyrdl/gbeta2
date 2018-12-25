@@ -9,17 +9,18 @@ Example code:
 package main
 
 import (
-	"demo/gbeta2"
-	"net/http"
-	"github.com/julienschmidt/httprouter"
 	"fmt"
 	"time"
+	"net/url"
+	"net/http"
 	"io/ioutil"
+	"github.com/yyrdl/gbeta2"
 	"github.com/json-iterator/go"
+	"github.com/julienschmidt/httprouter"
 )
 
 
-func Authed(w http.ResponseWriter, r *http.Request, ctx map[string]interface{},next gbeta2.Next){
+func Authed(w *gbeta2.Res, r *http.Request, ctx  *gbeta2.Ctx,next gbeta2.Next){
 	token:= r.Header.Get("token")
 	if token != "ok"{
 		w.Write([]byte(`{"success":"Access denied"}`))
@@ -30,32 +31,53 @@ func Authed(w http.ResponseWriter, r *http.Request, ctx map[string]interface{},n
 
 
 func Timecost(handle gbeta2.Handler) gbeta2.Handler{
-      return func(w http.ResponseWriter, r *http.Request ,ctx map[string]interface{},next gbeta2.Next){
+      return func(w *gbeta2.Res, r *http.Request ,ctx  *gbeta2.Ctx,next gbeta2.Next){
 		   now:= time.Now().UnixNano()
 		   handle(w,r,ctx,next)
 		   fmt.Println("time cost",time.Now().UnixNano()-now)
 	  }
 }
 
-func JSON_Parser(w http.ResponseWriter, r *http.Request ,ctx map[string]interface{},next gbeta2.Next){
+func JSON_Parser(w *gbeta2.Res, r *http.Request ,ctx  *gbeta2.Ctx,next gbeta2.Next){
 	 body,err:= ioutil.ReadAll(r.Body)
 	 
 	 if nil != err{
 		 w.Write([]byte(`{"success":false,"msg":"Internal error"}`))
 	 }else{
 		 var json = jsoniter.ConfigCompatibleWithStandardLibrary
-		 ctx["body"] = json.Get([]byte(body))
+		 ctx.Set("body" ,json.Get([]byte(body)))
 		 next()
 	 }
 }
 
-func Name(w http.ResponseWriter, r *http.Request ,ctx map[string]interface{},next gbeta2.Next){
+func Query_Parser(w *gbeta2.Res, r *http.Request ,ctx  *gbeta2.Ctx,next gbeta2.Next){
+	query,err:= url.ParseQuery(r.URL.RawQuery)
+	if nil != err{
+		w.WriteHeader(500)
+		w.Write([]byte(`{"success":false,"msg":"Failed to parse query:`+r.URL.Path+`"}`))
+	}else{
+		ctx.Set("query",query)
+		next()
+	}
+}
 
-    params:= ctx["params"].(httprouter.Params)
+func Name(w *gbeta2.Res, r *http.Request ,ctx *gbeta2.Ctx,next gbeta2.Next){
+
+    params:= ctx.Get("params").(httprouter.Params)
     
-    body:= ctx["body"].(jsoniter.Any)
+    body:= ctx.Get("body").(jsoniter.Any)
     
 	w.Write([]byte(`{"success":true,"message":"`+params.ByName("name")+`","age":"`+body.Get("age").ToString()+`"}`))
+}
+
+func Age(w *gbeta2.Res, r *http.Request ,ctx *gbeta2.Ctx,next gbeta2.Next){
+
+}
+
+func UserRouter()*gbeta2.Router{
+	router := gbeta2.New()
+	router.GET("/age",Age)
+	return router
 }
 
 func  main()  {
@@ -63,10 +85,15 @@ func  main()  {
     router := gbeta2.New()
     
 	router.Mw(Timecost)
-	
+
+	router.Use("/",Query_Parser)
+
 	router.Use("/",Authed) // token is required
 
-	router.POST("/:name",JSON_Parser,Name) 
+	router.POST("/hello/:name",JSON_Parser,Name) 
+
+    router.SubRouter("/info",UserRouter)
+	
 
 	http.ListenAndServe(":8080",router.Build())
 
