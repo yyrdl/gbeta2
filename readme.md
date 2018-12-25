@@ -71,7 +71,7 @@ func Name(w *gbeta2.Res, r *http.Request ,ctx *gbeta2.Ctx,next gbeta2.Next){
 }
 
 func Age(w *gbeta2.Res, r *http.Request ,ctx *gbeta2.Ctx,next gbeta2.Next){
-
+    w.Write([]byte(`{"success":true,"age":18}`))
 }
 
 func UserRouter()*gbeta2.Router{
